@@ -1,4 +1,3 @@
-import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Trash2, ArrowRight } from 'lucide-react';
 
@@ -23,49 +22,74 @@ export default function Cart({ cart, updateQuantity, removeFromCart }) {
   }
 
   return (
-    <div className="bg-[#F9F6F0] text-[#2D3831] min-h-screen py-16 px-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-[#F9F6F0] px-4 py-10 text-[#2D3831] sm:px-6 sm:py-16">
+      <div className="mx-auto max-w-7xl">
         
-        <h1 className="text-3xl md:text-4xl font-serif mb-12 border-b border-[#2D3831]/10 pb-6">Your Cart</h1>
+        <h1 className="mb-8 border-b border-[#2D3831]/10 pb-5 font-serif text-3xl sm:mb-12 sm:pb-6 sm:text-4xl">Your Cart</h1>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-16 items-start">
+        <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-3 lg:gap-16">
 
-          <div className="lg:col-span-2 space-y-8">
+          <div className="space-y-6 lg:col-span-2 lg:space-y-8">
             {cart.map((item) => (
-              <div key={item.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-8 border-b border-[#2D3831]/10 gap-6">
+              <div key={item.id} className="flex flex-col items-start justify-between gap-4 border-b border-[#2D3831]/10 pb-6 sm:flex-row sm:items-center sm:gap-6 sm:pb-8">
 
-                <div className="flex items-center space-x-6">
-                  <div className="w-24 h-28 bg-[#EBE5DE] overflow-hidden flex-shrink-0">
-                    <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                <div className="flex min-w-0 items-center gap-4 sm:gap-6">
+                  <div className="h-24 w-20 shrink-0 overflow-hidden bg-[#EBE5DE] sm:h-28 sm:w-24">
+                    <img src={item.image} alt={item.name} style={{ objectPosition: item.imagePosition }} className="w-full h-full object-cover" />
                   </div>
                   <div>
                     <p className="text-[10px] tracking-[0.2em] uppercase text-[#2D3831]/60 mb-1">{item.category}</p>
-                    <h3 className="font-serif text-lg text-[#2D3831] mb-2">{item.name}</h3>
-                    <p className="text-sm font-medium text-[#2D3831]">${item.price.toLocaleString()}</p>
+                    <h3 className="mb-2 break-words font-serif text-base text-[#2D3831] sm:text-lg">{item.name}</h3>
+                    <p className="flex flex-wrap items-baseline gap-2 text-sm font-medium text-[#2D3831]">
+                      {item.discountPercent > 0 && (
+                        <span className="text-xs font-normal text-[#2D3831]/50 line-through">
+                          ₱{item.originalPrice.toLocaleString()}
+                        </span>
+                      )}
+                      ₱{item.price.toLocaleString()}
+                      {item.discountPercent > 0 && (
+                        <span className="bg-[#2D3A31] px-1.5 py-0.5 text-[10px] font-normal tracking-widest text-[#F9F6F0]">
+                          -{item.discountPercent}%
+                        </span>
+                      )}
+                    </p>
+                    {item.stock !== undefined && item.stock <= 0 && (
+                      <p className="mt-1 text-xs text-red-700">Out of stock</p>
+                    )}
+                    {item.stock > 0 && item.quantity >= item.stock && (
+                      <p className="mt-1 text-xs text-[#B7791F]">Only {item.stock} in stock</p>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between w-full sm:w-auto space-x-8">
+                <div className="flex w-full items-center justify-between sm:w-auto sm:gap-8">
                   <div className="flex items-center border border-[#2D3831]/20">
-                    <button 
+                    <button
+                      type="button"
+                      aria-label={`Decrease ${item.name} quantity`}
                       onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                      className="px-3 py-1 hover:bg-[#2D3831]/5 transition-colors"
+                      className="flex h-11 w-11 items-center justify-center transition-colors hover:bg-[#2D3831]/5"
                     >
                       -
                     </button>
-                    <span className="px-4 text-xs">{item.quantity}</span>
-                    <button 
+                    <span aria-live="polite" className="min-w-10 px-2 text-center text-xs">{item.quantity}</span>
+                    <button
+                      type="button"
+                      aria-label={`Increase ${item.name} quantity`}
                       onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                      className="px-3 py-1 hover:bg-[#2D3831]/5 transition-colors"
+                      disabled={item.stock !== undefined && item.quantity >= item.stock}
+                      className="flex h-11 w-11 items-center justify-center transition-colors hover:bg-[#2D3831]/5 disabled:opacity-30"
                     >
                       +
                     </button>
                   </div>
 
-                  <button 
+                  <button
+                    type="button"
                     onClick={() => removeFromCart(item.id)}
-                    className="text-[#2D3831]/50 hover:text-[#2D3831] transition-colors"
+                    aria-label={`Remove ${item.name} from cart`}
                     title="Remove item"
+                    className="flex h-11 w-11 items-center justify-center text-[#2D3831]/50 transition-colors hover:text-[#2D3831]"
                   >
                     <Trash2 className="w-4 h-4 stroke-[1.5]" />
                   </button>
@@ -75,12 +99,12 @@ export default function Cart({ cart, updateQuantity, removeFromCart }) {
             ))}
           </div>
 
-          <div className="bg-[#EBE5DE]/40 p-8 border border-[#2D3831]/10 space-y-6">
+          <div className="space-y-5 border border-[#2D3831]/10 bg-[#EBE5DE]/40 p-5 sm:space-y-6 sm:p-8 lg:sticky lg:top-24">
             <h3 className="text-xs font-sans tracking-[0.2em] uppercase border-b border-[#2D3831]/10 pb-4">Order Summary</h3>
             
             <div className="flex justify-between text-sm tracking-wide">
               <span className="text-[#2D3831]/70">Subtotal</span>
-              <span className="font-medium">${subtotal.toLocaleString()}</span>
+              <span className="font-medium">₱{subtotal.toLocaleString()}</span>
             </div>
 
             <div className="flex justify-between text-sm tracking-wide">
@@ -90,10 +114,11 @@ export default function Cart({ cart, updateQuantity, removeFromCart }) {
 
             <div className="border-t border-[#2D3831]/10 pt-4 flex justify-between text-base font-medium">
               <span>Total</span>
-              <span>${subtotal.toLocaleString()}</span>
+              <span>₱{subtotal.toLocaleString()}</span>
             </div>
 
-            <button 
+            <button
+              type="button"
               onClick={() => navigate('/checkout')}
               className="w-full py-4 bg-[#2D3831] text-[#F9F6F0] text-xs tracking-[0.2em] uppercase hover:opacity-90 transition-opacity flex items-center justify-center space-x-3"
             >

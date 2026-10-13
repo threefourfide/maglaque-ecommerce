@@ -1,0 +1,58 @@
+@keyframes admin-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes admin-rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes admin-pop-in {
+  from { opacity: 0; transform: scale(0.96) translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes admin-toast-in {
+  from { opacity: 0; transform: translate(-50%, -14px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes admin-toast-bar {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+.admin-page { animation: admin-fade-in 0.35s ease; }
+.admin-fade { animation: admin-fade-in 0.3s ease both; }
+.admin-row { animation: admin-rise-in 0.35s ease both; }
+.admin-backdrop { animation: admin-fade-in 0.2s ease both; }
+.admin-modal { animation: admin-pop-in 0.25s ease both; }
+.admin-toast { animation: admin-toast-in 0.3s ease both; }
+.admin-toast-bar { transform-origin: left; animation: admin-toast-bar 3s linear forwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-page, .admin-fade, .admin-row, .admin-backdrop, .admin-modal, .admin-toast, .admin-toast-bar {
+    animation: none;
+  }
+}
+
+@keyframes admin-badge-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  60% { transform: scale(1.25); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.admin-pop { animation: admin-badge-pop 0.35s ease both; }
+@media (prefers-reduced-motion: reduce) {
+  .admin-pop { animation: none; }
+}
+
+@keyframes admin-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes admin-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.admin-draw { stroke-dasharray: 1; animation: admin-draw 0.9s ease-out both; }
+.admin-bar { transform-origin: left; animation: admin-grow 0.7s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .admin-draw, .admin-bar { animation: none; stroke-dasharray: none; }
+}
