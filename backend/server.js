@@ -884,6 +884,7 @@ const publicProduct = (p, stats, percent = 0) => ({
   details: p.details,
   materials: p.materials,
   image: p.image,
+  images: p.images && p.images.length ? p.images : [p.image].filter(Boolean),
   imagePosition: p.image_position || '50% 50%',
   featured: !!p.featured,
   status: p.status,
