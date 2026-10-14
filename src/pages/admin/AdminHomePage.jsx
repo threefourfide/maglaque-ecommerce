@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { adminFetchHomeContent, adminSaveHomeContent, DEFAULT_HOME_CONTENT } from '../../api';
-import { useToast } from './AdminUI';
+import { ConfirmModal, useToast } from './AdminUI';
+import { useOutletContext } from 'react-router-dom';
 
 const fieldGroups = [
   {
@@ -18,12 +19,14 @@ const inputClass = 'mt-1 w-full border border-[#8A6A4F]/70 bg-white px-3 py-3 te
 
 export default function AdminHomePage() {
   const toast = useToast();
+  const { onUnsavedChangesChange } = useOutletContext();
   const [content, setContent] = useState(DEFAULT_HOME_CONTENT);
   const [savedContent, setSavedContent] = useState(DEFAULT_HOME_CONTENT);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [confirmSave, setConfirmSave] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -49,8 +52,23 @@ export default function AdminHomePage() {
 
   const dirty = fields.some(({ name }) => content[name] !== savedContent[name]);
 
-  const save = async (event) => {
-    event.preventDefault();
+  useEffect(() => {
+    onUnsavedChangesChange(dirty);
+    return () => onUnsavedChangesChange(false);
+  }, [dirty, onUnsavedChangesChange]);
+
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const warnBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [dirty]);
+
+  const save = async () => {
+    setConfirmSave(false);
     setBusy(true);
     setError('');
     try {
@@ -65,6 +83,11 @@ export default function AdminHomePage() {
     }
   };
 
+  const requestSave = (event) => {
+    event.preventDefault();
+    setConfirmSave(true);
+  };
+
   return (
     <div className="mx-auto max-w-3xl">
       <h1 className="text-[22px] uppercase tracking-wide sm:text-3xl md:text-5xl">Homepage Content</h1>
@@ -76,7 +99,7 @@ export default function AdminHomePage() {
 
         {error && <p role="alert" className="mt-5 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
-        <form onSubmit={save} className="mt-6 space-y-6">
+        <form onSubmit={requestSave} className="mt-6 space-y-6">
           {fieldGroups.map((group) => (
             <section key={group.title} className="space-y-5 border-t border-[#2D3831]/10 pt-6">
               <h2 className="font-serif text-xl">{group.title}</h2>
@@ -122,6 +145,16 @@ export default function AdminHomePage() {
           </div>
         </form>
       </section>
+      {confirmSave && (
+        <ConfirmModal
+          title="Save homepage changes?"
+          message="These changes will be visible on the store homepage."
+          confirmLabel="Save"
+          busy={busy}
+          onConfirm={save}
+          onCancel={() => setConfirmSave(false)}
+        />
+      )}
     </div>
   );
 }

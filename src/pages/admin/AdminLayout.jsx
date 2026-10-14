@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Boxes, Tag, Users, LogOut, User, ScrollText, Archive, BarChart3, MessageSquare, Settings, ChevronDown, Store, ExternalLink, Menu, X } from 'lucide-react';
 import AddAdminModal from './AddAdminModal';
@@ -26,6 +26,8 @@ function Shell({ user, onLogout, onUserChange }) {
   const [navState, setNavState] = useState({ pathname, open: false });
   const navOpen = navState.pathname === pathname && navState.open;
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const [homepageHasUnsavedChanges, setHomepageHasUnsavedChanges] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState('');
   const closeTimer = useRef();
   const onSettings = pathname === '/admin/settings';
 
@@ -63,6 +65,33 @@ function Shell({ user, onLogout, onUserChange }) {
   const logout = () => {
     onLogout();
     navigate('/auth');
+  };
+
+  const reportHomepageChanges = useCallback((hasChanges) => {
+    setHomepageHasUnsavedChanges(hasChanges);
+  }, []);
+
+  const requestNavigation = (destination) => {
+    if (homepageHasUnsavedChanges) {
+      setPendingNavigation(destination);
+      return;
+    }
+    navigate(destination);
+  };
+
+  const leaveHomepage = () => {
+    const destination = pendingNavigation;
+    setPendingNavigation('');
+    if (destination === 'logout') {
+      logout();
+      return;
+    }
+    navigate(destination);
+  };
+
+  const confirmLogoutRequest = () => {
+    setConfirmLogout(false);
+    requestNavigation('logout');
   };
 
   return (
@@ -121,7 +150,7 @@ function Shell({ user, onLogout, onUserChange }) {
                   role="menuitem"
                   onClick={() => {
                     setMenuOpen(false);
-                    navigate('/admin/settings');
+                    requestNavigation('/admin/settings');
                   }}
                   className="relative flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition-colors hover:bg-[#2D3831]/5"
                 >
@@ -150,7 +179,7 @@ function Shell({ user, onLogout, onUserChange }) {
           <SlidingTabs
             items={navItems}
             value={active}
-            onChange={(key) => navigate(key)}
+            onChange={(key) => requestNavigation(key)}
             className="mt-4 flex flex-col gap-2 md:mt-8"
             pillClassName="rounded-md bg-[#2D3A31]"
             buttonClassName="w-full rounded-md px-4 py-3 text-left text-sm"
@@ -184,7 +213,7 @@ function Shell({ user, onLogout, onUserChange }) {
         <main className="min-w-0 flex-1 px-4 py-6 md:px-8">
           <StockReminder />
           <div key={pathname} className="admin-page">
-            <Outlet context={{ user, onUserChange }} />
+            <Outlet context={{ user, onUserChange, onUnsavedChangesChange: reportHomepageChanges }} />
           </div>
         </main>
       {confirmLogout && (
@@ -193,8 +222,19 @@ function Shell({ user, onLogout, onUserChange }) {
           message="Are you sure you want to log out?"
           confirmLabel="Log out"
           cancelLabel="Stay signed in"
-          onConfirm={logout}
+          onConfirm={confirmLogoutRequest}
           onCancel={() => setConfirmLogout(false)}
+        />
+      )}
+      {pendingNavigation && (
+        <ConfirmModal
+          title="Leave without saving?"
+          message="Your unsaved homepage content changes will be lost."
+          confirmLabel="Discard changes"
+          cancelLabel="Keep editing"
+          danger
+          onConfirm={leaveHomepage}
+          onCancel={() => setPendingNavigation('')}
         />
       )}
       {addAdmin && <AddAdminModal onClose={() => setAddAdmin(false)} onCreated={() => setAddAdmin(false)} />}

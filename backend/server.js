@@ -892,6 +892,23 @@ const cartPricesWithCode = (cart, products, discounts, coupon) => {
   return { items, subtotal, discountAmount: Math.round(discountAmount * 100) / 100, eligible };
 };
 
+const selectCartItems = (cart, requestedProductIds) => {
+  if (requestedProductIds === undefined) return { items: cart };
+  if (
+    !Array.isArray(requestedProductIds) ||
+    requestedProductIds.length === 0 ||
+    requestedProductIds.some((id) => !Number.isSafeInteger(id) || id < 1) ||
+    new Set(requestedProductIds).size !== requestedProductIds.length
+  ) {
+    return { error: 'Select one or more valid cart items.' };
+  }
+  const selectedIds = new Set(requestedProductIds);
+  const items = cart.filter((item) => selectedIds.has(item.product_id));
+  return items.length === selectedIds.size
+    ? { items }
+    : { error: 'A selected item is no longer in your cart. Refresh your cart and try again.' };
+};
+
 app.post('/api/discount-codes/validate', requireAuth, async (req, res) => {
   try {
     const code = typeof req.body?.code === 'string' ? req.body.code.trim().toUpperCase() : '';
@@ -905,7 +922,10 @@ app.post('/api/discount-codes/validate', requireAuth, async (req, res) => {
       endDate: { $gte: now },
     });
     if (!coupon) return res.status(400).json({ message: 'That discount code is invalid or expired.' });
-    const cart = await CartItem.find({ customer_id: req.auth.id });
+    const fullCart = await CartItem.find({ customer_id: req.auth.id });
+    const selection = selectCartItems(fullCart, req.body?.product_ids);
+    if (selection.error) return res.status(400).json({ message: selection.error });
+    const cart = selection.items;
     if (!cart.length) return res.status(400).json({ message: 'Your cart is empty.' });
     const products = await Product.find({
       product_id: { $in: cart.map((item) => item.product_id) },
@@ -1209,7 +1229,10 @@ app.post('/api/orders', requireAuth, async (req, res) => {
     }
     const address = await Address.findOne({ _id: address_id, customer_id: req.auth.id });
     if (!address) return res.status(400).json({ message: 'Choose a shipping address.' });
-    const cart = await CartItem.find({ customer_id: req.auth.id }).sort({ createdAt: 1 });
+    const fullCart = await CartItem.find({ customer_id: req.auth.id }).sort({ createdAt: 1 });
+    const selection = selectCartItems(fullCart, req.body?.product_ids);
+    if (selection.error) return res.status(400).json({ message: selection.error });
+    const cart = selection.items;
     if (cart.length === 0) return res.status(400).json({ message: 'Your cart is empty.' });
 
     const [prods, discounts] = await Promise.all([
@@ -1291,7 +1314,10 @@ app.post('/api/orders', requireAuth, async (req, res) => {
       await rollback();
       throw err;
     }
-    await CartItem.deleteMany({ customer_id: req.auth.id });
+    await CartItem.deleteMany({
+      customer_id: req.auth.id,
+      product_id: { $in: cart.map((item) => item.product_id) },
+    });
     emit('products');
     emit('order:new', { order_id: order.order_id, customer_id: String(req.auth.id) });
     res.status(201).json({ order: publicOrder(order) });

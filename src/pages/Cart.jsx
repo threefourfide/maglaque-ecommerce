@@ -1,10 +1,28 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Trash2, ArrowRight } from 'lucide-react';
 
-export default function Cart({ cart, updateQuantity, removeFromCart }) {
+export default function Cart({ cart, selectedIds = null, setSelectedIds, updateQuantity, removeFromCart }) {
   const navigate = useNavigate();
 
-  const subtotal = cart.reduce((total, item) => total + item.price * item.quantity, 0);
+  const selectedItems = selectedIds === null
+    ? cart
+    : cart.filter((item) => selectedIds.includes(item.id));
+  const selectedItemIds = selectedItems.map((item) => item.id);
+  const allSelected = cart.length > 0 && selectedItems.length === cart.length;
+  const subtotal = selectedItems.reduce((total, item) => total + item.price * item.quantity, 0);
+
+  const toggleItem = (id) => {
+    const currentIds = selectedIds === null ? cart.map((item) => item.id) : selectedIds;
+    setSelectedIds(
+      currentIds.includes(id)
+        ? currentIds.filter((selectedId) => selectedId !== id)
+        : [...currentIds, id]
+    );
+  };
+
+  const toggleAll = () => {
+    setSelectedIds(allSelected ? [] : cart.map((item) => item.id));
+  };
 
   if (cart.length === 0) {
     return (
@@ -30,10 +48,30 @@ export default function Cart({ cart, updateQuantity, removeFromCart }) {
         <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-3 lg:gap-16">
 
           <div className="space-y-6 lg:col-span-2 lg:space-y-8">
+            <label className="flex min-h-11 items-center gap-3 text-xs uppercase tracking-[0.15em] text-[#2D3831]/70">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleAll}
+                className="h-4 w-4 accent-[#2D3831]"
+                aria-label="Select all items"
+              />
+              Select all items
+              <span className="normal-case tracking-normal">
+                ({selectedItems.length} of {cart.length} selected)
+              </span>
+            </label>
             {cart.map((item) => (
               <div key={item.id} className="flex flex-col items-start justify-between gap-4 border-b border-[#2D3831]/10 pb-6 sm:flex-row sm:items-center sm:gap-6 sm:pb-8">
 
-                <div className="flex min-w-0 items-center gap-4 sm:gap-6">
+                <div className="flex min-w-0 items-center gap-3 sm:gap-5">
+                  <input
+                    type="checkbox"
+                    checked={selectedItemIds.includes(item.id)}
+                    onChange={() => toggleItem(item.id)}
+                    className="h-4 w-4 shrink-0 accent-[#2D3831]"
+                    aria-label={`Select ${item.name} for checkout`}
+                  />
                   <div className="h-24 w-20 shrink-0 overflow-hidden bg-[#EBE5DE] sm:h-28 sm:w-24">
                     <img src={item.image} alt={item.name} style={{ objectPosition: item.imagePosition }} className="w-full h-full object-cover" />
                   </div>
@@ -108,6 +146,11 @@ export default function Cart({ cart, updateQuantity, removeFromCart }) {
             </div>
 
             <div className="flex justify-between text-sm tracking-wide">
+              <span className="text-[#2D3831]/70">Items selected</span>
+              <span className="font-medium">{selectedItems.reduce((total, item) => total + item.quantity, 0)}</span>
+            </div>
+
+            <div className="flex justify-between text-sm tracking-wide">
               <span className="text-[#2D3831]/70">Shipping</span>
               <span className="text-xs uppercase tracking-wider text-[#2D3831]/60">Calculated at checkout</span>
             </div>
@@ -120,9 +163,10 @@ export default function Cart({ cart, updateQuantity, removeFromCart }) {
             <button
               type="button"
               onClick={() => navigate('/checkout')}
-              className="w-full py-4 bg-[#2D3831] text-[#F9F6F0] text-xs tracking-[0.2em] uppercase hover:opacity-90 transition-opacity flex items-center justify-center space-x-3"
+              disabled={selectedItems.length === 0}
+              className="flex w-full items-center justify-center space-x-3 bg-[#2D3831] py-4 text-xs uppercase tracking-[0.2em] text-[#F9F6F0] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <span>Proceed to Checkout</span>
+              <span>{selectedItems.length ? 'Proceed to Checkout' : 'Select items to checkout'}</span>
               <ArrowRight className="w-4 h-4 stroke-[1.5]" />
             </button>
           </div>

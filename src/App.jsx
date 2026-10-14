@@ -47,6 +47,7 @@ export default function App() {
   const [productsError, setProductsError] = useState('');
   const [authLoading, setAuthLoading] = useState(!!api.getToken());
   const [cart, setCart] = useState([]);
+  const [selectedCartIds, setSelectedCartIds] = useState(null);
   const [user, setUser] = useState(null);
   const userId = user?.id;
   const [toast, setToast] = useState(null); // "Added to cart" notification
@@ -71,6 +72,7 @@ export default function App() {
     setAddresses([]);
     setOrders([]);
     setCart([]);
+    setSelectedCartIds(null);
   }, []);
 
   // Remove the toast after its fade animation finishes
@@ -234,8 +236,8 @@ export default function App() {
     setUser(me);
   };
 
-  const addOrder = async ({ addressId, discountCode }) => {
-    const { order } = await api.createOrder(addressId, discountCode);
+  const addOrder = async ({ addressId, discountCode, productIds }) => {
+    const { order } = await api.createOrder(addressId, discountCode, productIds);
     setOrders((prev) => [order, ...prev]);
   };
 
@@ -307,10 +309,12 @@ export default function App() {
   const removeFromCart = (id) => {
     if (isCustomer) api.removeCartItem(id).catch(() => {});
     setCart((prevCart) => prevCart.filter((item) => item.id !== id));
+    setSelectedCartIds((prevIds) => prevIds === null ? null : prevIds.filter((selectedId) => selectedId !== id));
   };
 
-  const clearCart = () => {
-    setCart([]);
+  const clearCart = (productIds) => {
+    setCart((prevCart) => prevCart.filter((item) => !productIds.includes(item.id)));
+    setSelectedCartIds(null);
   };
 
   const liveCart = cart.map((item) => {
@@ -319,6 +323,9 @@ export default function App() {
       ? { ...item, price: p.price, originalPrice: p.originalPrice, discountPercent: p.discountPercent, stock: p.stock }
       : item;
   });
+  const selectedCart = selectedCartIds === null
+    ? liveCart
+    : liveCart.filter((item) => selectedCartIds.includes(item.id));
 
   const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
 
@@ -364,8 +371,8 @@ export default function App() {
             <Route path="/about" element={<AboutUs />} />
             <Route path="/catalog" element={<Catalog products={products} addToCart={addToCart} />} />
             <Route path="/product/:id" element={<ProductDetails products={products} loading={productsLoading} user={user} addToCart={addToCart} />} />
-            <Route path="/cart" element={<Cart cart={liveCart} updateQuantity={updateQuantity} removeFromCart={removeFromCart} />} />
-            <Route path="/checkout" element={authLoading ? null : <Checkout cart={liveCart} clearCart={clearCart} addOrder={addOrder} user={user} addresses={addresses} />} />
+            <Route path="/cart" element={<Cart cart={liveCart} selectedIds={selectedCartIds} setSelectedIds={setSelectedCartIds} updateQuantity={updateQuantity} removeFromCart={removeFromCart} />} />
+            <Route path="/checkout" element={authLoading ? null : <Checkout cart={selectedCart} clearCart={clearCart} addOrder={addOrder} user={user} addresses={addresses} />} />
             <Route path="/account" element={authLoading ? null : <Profile
               user={user}
               orders={orders}

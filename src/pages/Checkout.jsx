@@ -75,7 +75,7 @@ export default function Checkout({ cart, clearCart, addOrder, user, addresses = 
     setApplyingDiscount(true);
     setDiscountError('');
     try {
-      const result = await validateDiscountCode(code);
+      const result = await validateDiscountCode(code, cart.map((item) => item.id));
       setAppliedDiscount(result);
       setDiscountCode(result.code);
     } catch (err) {
@@ -96,9 +96,10 @@ export default function Checkout({ cart, clearCart, addOrder, user, addresses = 
     setPlacing(true);
     setOrderError('');
     try {
-      await addOrder({ addressId: selected.id, discountCode: appliedDiscount?.code || '' });
+      const productIds = cart.map((item) => item.id);
+      await addOrder({ addressId: selected.id, discountCode: appliedDiscount?.code || '', productIds });
       setIsSubmitted(true);
-      clearCart();
+      clearCart(productIds);
     } catch (err) {
       setOrderError(err.message || 'Could not place your order.');
     } finally {
