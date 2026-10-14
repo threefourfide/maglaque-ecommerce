@@ -62,7 +62,7 @@ function ReplyModal({ review, onClose, onSent }) {
       <div className="mt-4 bg-[#FAF6EF] p-4">
         <Stars value={review.rating} />
         <p className="mt-2 text-sm leading-relaxed text-[#2D3831]/80">{review.comment || 'No written review.'}</p>
-        <ReviewMedia items={review.media} size="h-16 w-16" />
+        <ReviewMedia items={review.media} size="h-20 w-20" />
       </div>
 
       <label className="mt-5 block text-sm text-[#2D3A31]">
@@ -249,14 +249,18 @@ export default function AdminReviews() {
                   <td className={td}>
                     <Stars value={r.rating} />
                   </td>
-                  <td className={`${td} max-w-xs`}>
-                    <p className="break-words leading-relaxed">{r.comment || <span className="text-[#2D3831]/50">No written review.</span>}</p>
-                    <ReviewMedia items={r.media} size="h-12 w-12" />
-                    {r.reply && (
-                      <p className="mt-2 border-l-2 border-[#0F4C3A] pl-2 text-xs text-[#2D3831]/70">
-                        <strong className="font-semibold text-[#0F4C3A]">Replied:</strong> {r.reply}
+                  <td className={`${td} w-[300px] max-w-[300px]`}>
+                    <div className="flex min-w-0 flex-col items-start gap-3">
+                      <p className="w-full whitespace-pre-wrap leading-relaxed [overflow-wrap:anywhere]">
+                        {r.comment || <span className="text-[#2D3831]/50">No written review.</span>}
                       </p>
-                    )}
+                      <ReviewMedia items={r.media} size="h-16 w-16" />
+                      {r.reply && (
+                        <p className="w-full border-l-2 border-[#0F4C3A] pl-2 text-xs text-[#2D3831]/70 [overflow-wrap:anywhere]">
+                          <strong className="font-semibold text-[#0F4C3A]">Replied:</strong> {r.reply}
+                        </p>
+                      )}
+                    </div>
                   </td>
                   <td className={`${td} text-xs font-bold uppercase ${r.status === 'Shown' ? 'text-[#2D6A4F]' : 'text-[#B3261E]'}`}>{r.status}</td>
                   <td className={`${td} w-40 min-w-40`}>

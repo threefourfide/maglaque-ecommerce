@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { ArrowLeft, Camera, Check, User } from 'lucide-react';
 import { updateProfile, changePassword, uploadPhoto, removePhoto } from '../../api';
+import PasswordVisibilityField from '../../components/PasswordVisibilityField';
 import { ConfirmModal, useToast } from './AdminUI';
 import { goBack as navBack } from '../../utils/nav';
 import { cleanPhone, validPhone, validName, PHONE_ERROR, NAME_ERROR } from '../../utils/validate';
@@ -278,8 +279,7 @@ export default function AdminSettings() {
         <div className="mt-6 space-y-4">
           <label className="block text-sm text-[#2D3A31]">
             Current password
-            <input
-              type="password"
+            <PasswordVisibilityField
               value={pw.current}
               onChange={(e) => { setPw({ ...pw, current: e.target.value }); setPwError(''); }}
               autoComplete="current-password"
@@ -288,8 +288,7 @@ export default function AdminSettings() {
           </label>
           <label className="block text-sm text-[#2D3A31]">
             New password
-            <input
-              type="password"
+            <PasswordVisibilityField
               value={pw.next}
               onChange={(e) => { setPw({ ...pw, next: e.target.value }); setPwError(''); }}
               onFocus={() => setShowReq(true)}
@@ -311,8 +310,7 @@ export default function AdminSettings() {
           )}
           <label className="block text-sm text-[#2D3A31]">
             Confirm new password
-            <input
-              type="password"
+            <PasswordVisibilityField
               value={pw.confirm}
               onChange={(e) => { setPw({ ...pw, confirm: e.target.value }); setPwError(''); }}
               autoComplete="new-password"

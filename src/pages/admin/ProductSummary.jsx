@@ -26,7 +26,7 @@ function Column({ title, list = [] }) {
   );
 }
 
-export function ProductSummary({ product }) {
+export function ProductSummary({ product, showMaterials = true }) {
   const [index, setIndex] = useState(0);
   const images = product.images?.length ? product.images : [product.image].filter(Boolean);
   const current = images[Math.min(index, images.length - 1)];
@@ -74,7 +74,7 @@ export function ProductSummary({ product }) {
         </div>
       </div>
 
-      <div className="mt-6 grid gap-4 bg-[#F6F2EC] p-4 md:grid-cols-2">
+      <div className={`mt-6 grid gap-4 bg-[#F6F2EC] p-4 ${showMaterials ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
         <div className="border border-[#2D3831]/40 bg-white p-4">
           <p className="text-sm font-semibold text-[#2D3A31]">Product Specifications</p>
           <div className="mt-3 grid grid-cols-2 gap-4">
@@ -93,14 +93,16 @@ export function ProductSummary({ product }) {
             </div>
           </div>
         </div>
-        <div className="border border-[#2D3831]/40 bg-white p-4">
-          <p className="text-sm font-semibold text-[#2D3A31]">Product Materials</p>
-          <div className="mt-3 flex gap-3">
-            <Column title="Carpentry" list={mat.carpentry} />
-            <Column title="Upholstery" list={mat.upholstery} />
-            <Column title="Finishing" list={mat.finishing} />
+        {showMaterials && (
+          <div className="border border-[#2D3831]/40 bg-white p-4">
+            <p className="text-sm font-semibold text-[#2D3A31]">Product Materials</p>
+            <div className="mt-3 flex gap-3">
+              <Column title="Carpentry" list={mat.carpentry} />
+              <Column title="Upholstery" list={mat.upholstery} />
+              <Column title="Finishing" list={mat.finishing} />
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </>
   );

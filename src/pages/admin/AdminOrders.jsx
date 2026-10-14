@@ -117,6 +117,12 @@ function OrderModal({ order, busy, error, onClose, onAction, onOpenProduct }) {
                   </span>
                 </div>
               )}
+              {order.discountCode && order.discountAmount > 0 && (
+                <div className="flex items-center justify-between pb-2 text-sm text-[#2D6A4F]">
+                  <span>Code {order.discountCode} savings</span>
+                  <span>₱{order.discountAmount.toLocaleString()}</span>
+                </div>
+              )}
               <div className="flex items-center justify-between border-t border-[#2D3831]/50 pt-3">
                 <span className="font-semibold">TOTAL</span>
                 <span className="text-lg">{peso(order.total)}</span>

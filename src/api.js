@@ -74,7 +74,8 @@ export const setCartQuantity = (id, quantity) => request("PUT", `/api/cart/${id}
 export const removeCartItem = (id) => request("DELETE", `/api/cart/${id}`);
 export const clearCartItems = () => request("DELETE", "/api/cart");
 export const fetchOrders = () => request("GET", "/api/orders");
-export const createOrder = (addressId) => request("POST", "/api/orders", { address_id: addressId });
+export const createOrder = (addressId, discountCode = '') =>
+  request("POST", "/api/orders", { address_id: addressId, ...(discountCode ? { discountCode } : {}) });
 export const fetchProducts = () => request("GET", "/api/products");
 export const fetchHomeContent = () => request("GET", "/api/homepage-content");
 export const adminFetchHomeContent = () => request("GET", "/api/admin/homepage-content");
@@ -127,6 +128,7 @@ export const adminReplyReview = (id, reply) => request("POST", `/api/admin/revie
 export const fetchShippingRates = () => request("GET", "/api/shipping-rates");
 export const adminSaveShippingRates = (rates) => request("PUT", "/api/admin/shipping-rates", { rates });
 export const fetchShippingPromos = () => request("GET", "/api/shipping-promos");
+export const validateDiscountCode = (code) => request("POST", "/api/discount-codes/validate", { code });
 export const adminUpdateDiscount = (id, body) => request("PUT", `/api/admin/discounts/${id}`, body);
 export const markOrderReceived = (orderId) => request("PATCH", `/api/orders/${orderId}/received`);
 export const markOrdersSeen = (status) => request("POST", "/api/orders/seen", { status });

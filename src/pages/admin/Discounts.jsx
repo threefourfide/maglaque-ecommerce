@@ -55,6 +55,8 @@ export function AddDiscountModal({ discount, onClose, onCreated }) {
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState(discount?.name || '');
   const [type, setType] = useState(discount?.type || 'product');
+  const [application, setApplication] = useState(discount?.code ? 'code' : 'automatic');
+  const [code, setCode] = useState(discount?.code || '');
   const [shippingMode, setShippingMode] = useState(discount?.shippingMode || 'free');
   const [minSpend, setMinSpend] = useState(discount?.minSpend ? String(discount.minSpend) : '');
   const initialPercent = discount && !(discount.type === 'shipping' && discount.shippingMode === 'free') ? String(discount.percent) : '';
@@ -121,9 +123,13 @@ export function AddDiscountModal({ discount, onClose, onCreated }) {
   };
 
   const isShipping = type === 'shipping';
+  const usesCode = !isShipping && application === 'code';
 
   const validate = () => {
     if (!name.trim()) return isShipping ? 'Enter a promo name.' : 'Enter a discount name.';
+    if (usesCode && !/^[A-Z0-9_-]{3,32}$/.test(code.trim().toUpperCase())) {
+      return 'Enter a discount code using 3 to 32 letters, numbers, hyphens, or underscores.';
+    }
     const pct = Number(percent);
     if ((!isShipping || shippingMode === 'percent') && (!percent || !Number.isInteger(pct) || pct < 1 || pct > 99)) {
       return isShipping ? 'Shipping discount must be a whole number from 1 to 99.' : 'Deduction must be a whole number from 1 to 99.';
@@ -151,7 +157,7 @@ export function AddDiscountModal({ discount, onClose, onCreated }) {
         name: name.trim(),
         ...(isShipping
           ? { shippingMode, percent: Number(percent), minSpend: minSpend === '' ? 0 : Number(minSpend) }
-          : { percent: Number(percent), productIds: [...selected] }),
+          : { percent: Number(percent), productIds: [...selected], code: usesCode ? code.trim().toUpperCase() : '' }),
         startDate: startOfDay(start).toISOString(),
         endDate: endOfDay(end).toISOString(),
       });
@@ -206,6 +212,38 @@ export function AddDiscountModal({ discount, onClose, onCreated }) {
             {isShipping ? 'Promo name' : 'Discount name'}
             <input value={name} onChange={(e) => { setName(e.target.value); setError(''); }} maxLength={80} placeholder={isShipping ? 'e.g. Free Shipping Week' : 'e.g. Holiday Sale'} className={fieldClass} />
           </label>
+          {!isShipping && (
+            <label className="block text-sm text-[#2D3A31]">
+              Discount application
+              <select
+                value={application}
+                onChange={(e) => {
+                  setApplication(e.target.value);
+                  setError('');
+                }}
+                className={fieldClass}
+              >
+                <option value="automatic">Automatic</option>
+                <option value="code">Customer Input</option>
+              </select>
+              {usesCode && <span className="mt-1 block text-xs text-[#2D3831]/60">Customers enter a code at checkout.</span>}
+            </label>
+          )}
+          {usesCode && (
+            <label className="admin-fade block text-sm text-[#2D3A31]">
+              Discount code
+              <input
+                value={code}
+                onChange={(e) => {
+                  setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 32));
+                  setError('');
+                }}
+                maxLength={32}
+                placeholder="e.g. ELLE10"
+                className={fieldClass}
+              />
+            </label>
+          )}
           {isShipping && (
             <label className="admin-fade block text-sm text-[#2D3A31]">
               Benefit
@@ -348,7 +386,7 @@ export function AddDiscountModal({ discount, onClose, onCreated }) {
           message={
             isShipping
               ? `${name.trim()} will give ${shippingMode === 'free' ? 'free shipping' : `${percent}% off the shipping fee`}${minSpend ? ` on orders of ₱${Number(minSpend).toLocaleString()} or more` : ''} from ${dateLabel(startOfDay(start))} to ${dateLabel(endOfDay(end))}.`
-              : `${name.trim()} will take ${percent}% off ${selected.size} product${selected.size === 1 ? '' : 's'} from ${dateLabel(startOfDay(start))} to ${dateLabel(endOfDay(end))}.`
+              : `${name.trim()} will take ${percent}% off ${selected.size} product${selected.size === 1 ? '' : 's'}${usesCode ? ` when customers enter code ${code.trim().toUpperCase()}` : ' automatically'} from ${dateLabel(startOfDay(start))} to ${dateLabel(endOfDay(end))}.`
           }
           confirmLabel={editing ? 'Save' : 'Create'}
           busy={busy}
@@ -459,10 +497,15 @@ export function DiscountTable({ version }) {
                   {d.type === 'shipping' && (
                     <span className="ml-2 border border-[#0F4C3A] px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-[#0F4C3A]">Shipping</span>
                   )}
+                  {d.code && (
+                    <span className="ml-2 border border-[#2F6F8F] px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-[#2F6F8F]">
+                      Code: {d.code}
+                    </span>
+                  )}
                   <span className="block text-[11px] text-[#2D3831]/60">
                     {d.type === 'shipping'
                       ? `All regions${d.minSpend ? ` · min. spend ₱${d.minSpend.toLocaleString()}` : ''}`
-                      : `${d.productCount} product${d.productCount === 1 ? '' : 's'}`}
+                      : `${d.productCount} product${d.productCount === 1 ? '' : 's'}${d.code ? ' · customer enters code' : ' · automatic'}`}
                   </span>
                 </td>
                 <td className={td}>

@@ -496,6 +496,8 @@ const orderSchema = new mongoose.Schema(
     shippingFee: { type: Number, default: 0 },
     shippingFeeOriginal: { type: Number, default: 0 },
     shippingPromo: { type: String, default: '' },
+    discountCode: { type: String, default: '' },
+    discountAmount: { type: Number, default: 0 },
     cancelReason: { type: String, default: '' },
     adminSeen: { type: Boolean, default: false },
     customerSeenStatus: { type: String, default: '' },
@@ -540,6 +542,8 @@ const publicOrder = (o) => ({
   shippingFee: o.shippingFee || 0,
   shippingFeeOriginal: o.shippingFeeOriginal || 0,
   shippingPromo: o.shippingPromo || '',
+  discountCode: o.discountCode || '',
+  discountAmount: o.discountAmount || 0,
   customerSeenStatus: o.customerSeenStatus || '',
   cancelReason: o.cancelReason || '',
 });
@@ -806,6 +810,7 @@ const discountSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     type: { type: String, enum: ['product', 'shipping'], default: 'product' },
+    code: { type: String, trim: true, uppercase: true, unique: true, sparse: true },
     shipping_mode: { type: String, enum: ['free', 'percent', ''], default: '' },
     min_spend: { type: Number, default: 0, min: 0 },
     percent: { type: Number, required: true, min: 1, max: 100 },
@@ -827,7 +832,13 @@ const discountStatus = (d, now = new Date()) => {
 
 const activeDiscountMap = async () => {
   const now = new Date();
-  const list = await Discount.find({ type: { $ne: 'shipping' }, enabled: true, startDate: { $lte: now }, endDate: { $gte: now } });
+  const list = await Discount.find({
+    type: { $ne: 'shipping' },
+    $or: [{ code: { $exists: false } }, { code: null }, { code: '' }],
+    enabled: true,
+    startDate: { $lte: now },
+    endDate: { $gte: now },
+  });
   const map = new Map();
   for (const d of list) {
     for (const id of d.product_ids) {
@@ -857,6 +868,68 @@ app.get('/api/shipping-promos', async (req, res) => {
 });
 
 const effectivePrice = (price, percent) => (percent ? Math.round(price * (100 - percent)) / 100 : price);
+
+const cartPricesWithCode = (cart, products, discounts, coupon) => {
+  let discountAmount = 0;
+  let eligible = false;
+  const items = cart.map((c) => {
+    const product = products.get(c.product_id);
+    const automaticPercent = discounts.get(c.product_id) || 0;
+    const codePercent = coupon?.product_ids.includes(c.product_id) ? coupon.percent : 0;
+    if (codePercent) eligible = true;
+    const percent = Math.max(automaticPercent, codePercent);
+    const price = effectivePrice(product.price, percent);
+    discountAmount += (effectivePrice(product.price, automaticPercent) - price) * c.quantity;
+    return {
+      product_id: c.product_id,
+      name: product.name,
+      price,
+      image: product.image,
+      quantity: c.quantity,
+    };
+  });
+  const subtotal = Math.round(items.reduce((sum, item) => sum + item.price * item.quantity, 0) * 100) / 100;
+  return { items, subtotal, discountAmount: Math.round(discountAmount * 100) / 100, eligible };
+};
+
+app.post('/api/discount-codes/validate', requireAuth, async (req, res) => {
+  try {
+    const code = typeof req.body?.code === 'string' ? req.body.code.trim().toUpperCase() : '';
+    if (!/^[A-Z0-9_-]{3,32}$/.test(code)) return res.status(400).json({ message: 'Enter a valid discount code.' });
+    const now = new Date();
+    const coupon = await Discount.findOne({
+      code,
+      type: 'product',
+      enabled: true,
+      startDate: { $lte: now },
+      endDate: { $gte: now },
+    });
+    if (!coupon) return res.status(400).json({ message: 'That discount code is invalid or expired.' });
+    const cart = await CartItem.find({ customer_id: req.auth.id });
+    if (!cart.length) return res.status(400).json({ message: 'Your cart is empty.' });
+    const products = await Product.find({
+      product_id: { $in: cart.map((item) => item.product_id) },
+      status: 'Active',
+      archived: { $ne: true },
+    });
+    const productMap = new Map(products.map((product) => [product.product_id, product]));
+    if (cart.some((item) => !productMap.has(item.product_id))) {
+      return res.status(409).json({ message: 'A product in your cart is no longer available.' });
+    }
+    const prices = cartPricesWithCode(cart, productMap, await activeDiscountMap(), coupon);
+    if (!prices.eligible) return res.status(400).json({ message: 'This code does not apply to products in your cart.' });
+    if (!prices.discountAmount) return res.status(400).json({ message: 'An automatic discount already gives you an equal or better price.' });
+    res.json({
+      code: coupon.code,
+      name: coupon.name,
+      percent: coupon.percent,
+      discountAmount: prices.discountAmount,
+      subtotal: prices.subtotal,
+    });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
 
 let discountSignature = '';
 const checkDiscountChanges = async () => {
@@ -1127,8 +1200,12 @@ app.post('/api/orders/seen', requireAuth, async (req, res) => {
 app.post('/api/orders', requireAuth, async (req, res) => {
   try {
     const { address_id } = req.body || {};
+    const discountCode = typeof req.body?.discountCode === 'string' ? req.body.discountCode.trim().toUpperCase() : '';
     if (!mongoose.isValidObjectId(address_id)) {
       return res.status(400).json({ message: 'Choose a shipping address.' });
+    }
+    if (discountCode && !/^[A-Z0-9_-]{3,32}$/.test(discountCode)) {
+      return res.status(400).json({ message: 'Enter a valid discount code.' });
     }
     const address = await Address.findOne({ _id: address_id, customer_id: req.auth.id });
     if (!address) return res.status(400).json({ message: 'Choose a shipping address.' });
@@ -1140,6 +1217,23 @@ app.post('/api/orders', requireAuth, async (req, res) => {
       activeDiscountMap(),
     ]);
     const byId = new Map(prods.map((p) => [p.product_id, p]));
+    const coupon = discountCode
+      ? await Discount.findOne({
+          code: discountCode,
+          type: 'product',
+          enabled: true,
+          startDate: { $lte: new Date() },
+          endDate: { $gte: new Date() },
+        })
+      : null;
+    if (discountCode && !coupon) return res.status(400).json({ message: 'That discount code is invalid or expired.' });
+    if (cart.some((item) => !byId.has(item.product_id))) {
+      const unavailable = cart.find((item) => !byId.has(item.product_id));
+      return res.status(409).json({ message: `${unavailable.name} is no longer available. Remove it from your cart.` });
+    }
+    const prices = cartPricesWithCode(cart, byId, discounts, coupon);
+    if (coupon && !prices.eligible) return res.status(400).json({ message: 'This code does not apply to products in your cart.' });
+    if (coupon && !prices.discountAmount) return res.status(400).json({ message: 'An automatic discount already gives you an equal or better price.' });
     const baseRate = await shippingFeeFor(address);
     const shippingPromos = await activeShippingPromos();
     const reserved = [];
@@ -1147,10 +1241,6 @@ app.post('/api/orders', requireAuth, async (req, res) => {
       Promise.all(reserved.map((c) => Product.updateOne({ product_id: c.product_id }, { $inc: { stock: c.quantity } })));
     for (const c of cart) {
       const p = byId.get(c.product_id);
-      if (!p) {
-        await rollback();
-        return res.status(409).json({ message: `${c.name} is no longer available. Remove it from your cart.` });
-      }
       const r = await Product.updateOne({ product_id: c.product_id, stock: { $gte: c.quantity } }, { $inc: { stock: -c.quantity } });
       if (r.modifiedCount === 0) {
         await rollback();
@@ -1168,16 +1258,7 @@ app.post('/api/orders', requireAuth, async (req, res) => {
         .collection('counters')
         .findOneAndUpdate({ _id: 'orders' }, { $inc: { seq: 1 } }, { upsert: true, returnDocument: 'after' });
       const seq = (counter.value ?? counter).seq;
-      const items = cart.map((c) => {
-        const p = byId.get(c.product_id);
-        return {
-          product_id: c.product_id,
-          name: p.name,
-          price: effectivePrice(p.price, discounts.get(c.product_id) || 0),
-          image: p.image,
-          quantity: c.quantity,
-        };
-      });
+      const items = prices.items;
       const merchandise = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
       const promo = bestShippingPromo(shippingPromos, merchandise);
       const shippingFee = feeAfterPromo(baseRate, promo);
@@ -1199,7 +1280,9 @@ app.post('/api/orders', requireAuth, async (req, res) => {
         shippingFee,
         shippingFeeOriginal: baseRate,
         shippingPromo: promo && baseRate > 0 ? promo.name : '',
-        total: Math.round((items.reduce((sum, i) => sum + i.price * i.quantity, 0) + shippingFee) * 100) / 100,
+        discountCode: coupon?.code || '',
+        discountAmount: prices.discountAmount,
+        total: Math.round((merchandise + shippingFee) * 100) / 100,
         status: 'Pending',
         customerSeenStatus: 'Pending',
         adminSeen: false,
@@ -1460,11 +1543,15 @@ const list = (v) =>
     .filter(Boolean)
     .slice(0, 8);
 
+const isValidProductDimension = (value) =>
+  /^\d+(?:\.\d+)?\s*(?:cm|mm|m|in|inches?|ft|feet|')$/i.test(value) && Number.parseFloat(value) > 0;
+
 const cleanProductInput = (b = {}) => {
   const name = text(b.name, 120);
   const description = text(b.description, 2000);
   const type = text(b.type, 60);
   const price = Number(b.price);
+  const priceText = typeof b.price === 'string' ? b.price.trim() : String(b.price);
   const images = (Array.isArray(b.images) ? b.images : []).filter(isImage).slice(0, 3);
   const spec = b.specifications || {};
   const specifications = {};
@@ -1472,13 +1559,16 @@ const cleanProductInput = (b = {}) => {
     specifications[k] = text(spec[k], 120);
   }
   if (!name || !description || !type) return { error: 'Fill in all the fields.' };
-  if (!(price > 0)) return { error: 'Price must be greater than zero.' };
+  if (!/^(?:\d+|\d*\.\d{1,2})$/.test(priceText) || !Number.isFinite(price) || price <= 0 || Math.round(price * 100) <= 0) {
+    return { error: 'Enter a valid price greater than zero, with no more than two decimal places.' };
+  }
   if (images.length === 0) return { error: 'Add at least one product photo.' };
   if (Object.values(specifications).some((v) => !v)) return { error: 'Fill in all the fields.' };
   for (const k of ['length', 'width', 'height', 'depth']) {
-    if (!/\d/.test(specifications[k])) return { error: `${k[0].toUpperCase() + k.slice(1)} must include a number.` };
+    if (!isValidProductDimension(specifications[k])) {
+      return { error: `${k[0].toUpperCase() + k.slice(1)} must be a positive measurement with a unit (e.g. 120 cm or 47 in).` };
+    }
   }
-  const md = b.materialDetails || {};
   const stock = b.stock === undefined || b.stock === '' ? undefined : Number(b.stock);
   if (stock !== undefined && (!Number.isInteger(stock) || stock < 0 || stock > 1000000)) {
     return { error: 'Stock must be a whole number, 0 or more.' };
@@ -1495,11 +1585,15 @@ const cleanProductInput = (b = {}) => {
       status: b.status === 'Inactive' ? 'Inactive' : 'Active',
       featured: !!b.featured,
       specifications,
-      material_details: {
-        carpentry: list(md.carpentry),
-        upholstery: list(md.upholstery),
-        finishing: list(md.finishing),
-      },
+      ...(b.materialDetails
+        ? {
+            material_details: {
+              carpentry: list(b.materialDetails.carpentry),
+              upholstery: list(b.materialDetails.upholstery),
+              finishing: list(b.materialDetails.finishing),
+            },
+          }
+        : {}),
     },
   };
 };
@@ -1835,6 +1929,7 @@ const adminDiscount = (d) => ({
   id: d._id,
   name: d.name,
   type: d.type || 'product',
+  code: d.code || '',
   shippingMode: d.shipping_mode || '',
   minSpend: d.min_spend || 0,
   percent: d.percent,
@@ -1860,7 +1955,7 @@ app.get('/api/admin/discounts', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
-const parseDiscountInput = async (body = {}, { editing = false } = {}) => {
+const parseDiscountInput = async (body = {}, { editing = false, discountId = null } = {}) => {
   const type = body.type === 'shipping' ? 'shipping' : 'product';
   const name = text(body.name, 80);
   const startDate = new Date(body.startDate);
@@ -1896,15 +1991,24 @@ const parseDiscountInput = async (body = {}, { editing = false } = {}) => {
   }
 
   const percent = Number(body.percent);
+  const code = typeof body.code === 'string' ? body.code.trim().toUpperCase() : '';
   const ids = [...new Set((Array.isArray(body.productIds) ? body.productIds : []).map(Number))].filter(Number.isInteger);
   if (!Number.isInteger(percent) || percent < 1 || percent > 99) {
     return { error: 'Deduction must be a whole number from 1 to 99.' };
+  }
+  if (code && !/^[A-Z0-9_-]{3,32}$/.test(code)) {
+    return { error: 'Discount codes must be 3 to 32 letters, numbers, hyphens, or underscores.' };
+  }
+  if (code) {
+    const query = { code };
+    if (discountId) query._id = { $ne: discountId };
+    if (await Discount.exists(query)) return { error: 'That discount code is already in use.' };
   }
   if (ids.length === 0) return { error: 'Choose at least one product.' };
   const found = await Product.countDocuments({ product_id: { $in: ids }, archived: { $ne: true } });
   if (found !== ids.length) return { error: 'Some chosen products no longer exist.' };
   return {
-    data: { type, name, percent, shipping_mode: '', min_spend: 0, product_ids: ids, startDate, endDate },
+    data: { type, name, ...(code ? { code } : { code: undefined }), percent, shipping_mode: '', min_spend: 0, product_ids: ids, startDate, endDate },
     label: `discount ${name} (${percent}% off ${ids.length} product${ids.length === 1 ? '' : 's'})`,
   };
 };
@@ -1918,6 +2022,7 @@ app.post('/api/admin/discounts', requireAuth, requireAdmin, async (req, res) => 
     await checkDiscountChanges();
     res.status(201).json({ discount: adminDiscount(d) });
   } catch (err) {
+    if (err.code === 11000 && err.keyPattern?.code) return res.status(409).json({ message: 'That discount code is already in use.' });
     serverError(res, err);
   }
 });
@@ -1927,7 +2032,7 @@ app.put('/api/admin/discounts/:id', requireAuth, requireAdmin, async (req, res) 
     if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ message: 'Discount not found.' });
     const d = await Discount.findById(req.params.id);
     if (!d) return res.status(404).json({ message: 'Discount not found.' });
-    const { data, label, error } = await parseDiscountInput({ ...req.body, type: d.type || 'product' }, { editing: true });
+    const { data, label, error } = await parseDiscountInput({ ...req.body, type: d.type || 'product' }, { editing: true, discountId: d._id });
     if (error) return res.status(400).json({ message: error });
     d.set(data);
     await d.save();
@@ -1935,6 +2040,7 @@ app.put('/api/admin/discounts/:id', requireAuth, requireAdmin, async (req, res) 
     await checkDiscountChanges();
     res.json({ discount: adminDiscount(d) });
   } catch (err) {
+    if (err.code === 11000 && err.keyPattern?.code) return res.status(409).json({ message: 'That discount code is already in use.' });
     serverError(res, err);
   }
 });

@@ -37,16 +37,12 @@ const emptyForm = {
   material: '',
   color: '',
   finish: '',
-  carpentry: '',
-  upholstery: '',
-  finishing: '',
 };
 
 const formFromProduct = (p) => {
   const imgs = [...(p.images || [p.image])].slice(0, 3);
   while (imgs.length < 3) imgs.push('');
   const spec = p.specifications || {};
-  const mat = p.materialDetails || {};
   return {
     images: imgs,
     name: p.name,
@@ -64,13 +60,8 @@ const formFromProduct = (p) => {
     material: spec.material || '',
     color: spec.color || '',
     finish: spec.finish || '',
-    carpentry: (mat.carpentry || []).join(', '),
-    upholstery: (mat.upholstery || []).join(', '),
-    finishing: (mat.finishing || []).join(', '),
   };
 };
-
-const splitList = (v) => v.split(',').map((x) => x.trim()).filter(Boolean);
 
 const resolveType = (form) => (form.type === OTHER ? form.newType.trim() : form.type.trim());
 
@@ -92,12 +83,17 @@ const toPayload = (form) => ({
     color: form.color.trim(),
     finish: form.finish.trim(),
   },
-  materialDetails: {
-    carpentry: splitList(form.carpentry),
-    upholstery: splitList(form.upholstery),
-    finishing: splitList(form.finishing),
-  },
 });
+
+const validPrice = (value) => {
+  if (!/^(?:\d+|\d*\.\d{1,2})$/.test(value.trim())) return false;
+  const price = Number(value);
+  return Number.isFinite(price) && price > 0 && Math.round(price * 100) > 0;
+};
+
+const validDimension = (value) =>
+  /^\d+(?:\.\d+)?\s*(?:cm|mm|m|in|inches?|ft|feet|')$/i.test(value.trim()) &&
+  Number.parseFloat(value) > 0;
 
 const resizeImage = (file, max = 900) =>
   new Promise((resolve, reject) => {
@@ -179,22 +175,26 @@ function ProductFormModal({ mode, categoryLock, types, initial, featuredCount, o
   const validate = (target) => {
     if (target === 0) {
       if (!form.images.some(Boolean)) return 'Add at least one product photo.';
-      if (!form.name.trim() || !form.description.trim() || !String(form.price).trim()) {
-        return 'Fill in all the fields.';
-      }
-      const price = Number(form.price);
-      if (!Number.isFinite(price) || price <= 0) return 'Price must be greater than zero.';
+      if (!form.name.trim()) return 'Enter a product name.';
+      if (!form.description.trim()) return 'Enter a product description.';
+      if (!String(form.price).trim()) return 'Enter a price.';
+      if (!validPrice(String(form.price))) return 'Enter a valid price greater than zero.';
       if (!resolveType(form)) return form.type === OTHER ? 'Type the new category name.' : 'Choose a category.';
-      if (mode === 'add' && !/^\d+$/.test(form.stock)) return 'Enter the starting stock (0 or more).';
+      if (mode === 'add' && (!/^\d+$/.test(form.stock) || Number(form.stock) > 1000000)) {
+        return 'Enter a whole-number stock amount from 0 to 1,000,000.';
+      }
     }
     if (target === 1) {
       const dims = ['length', 'width', 'height', 'depth'];
-      if (dims.some((k) => !form[k].trim())) return 'Fill in all the dimensions.';
-      const bad = dims.find((k) => !/\d/.test(form[k]));
-      if (bad) return `${bad[0].toUpperCase() + bad.slice(1)} must include a number (e.g. 120 cm or 47 in).`;
+      const missing = dims.find((k) => !form[k].trim());
+      if (missing) return `Enter the ${missing} of the product.`;
+      const bad = dims.find((k) => !validDimension(form[k]));
+      if (bad) return `${bad[0].toUpperCase() + bad.slice(1)} must be a positive measurement with a unit (e.g. 120 cm or 47 in).`;
     }
     if (target === 2) {
-      if (!form.material.trim() || !form.color.trim() || !form.finish.trim()) return 'Fill in all the fields.';
+      if (!form.material.trim()) return 'Enter the product material.';
+      if (!form.color.trim()) return 'Enter the product color.';
+      if (!form.finish.trim()) return 'Enter the product finish.';
     }
     return '';
   };
@@ -251,11 +251,6 @@ function ProductFormModal({ mode, categoryLock, types, initial, featuredCount, o
       material: form.material,
       color: form.color,
       finish: form.finish,
-    },
-    materialDetails: {
-      carpentry: splitList(form.carpentry),
-      upholstery: splitList(form.upholstery),
-      finishing: splitList(form.finishing),
     },
   };
 
@@ -335,14 +330,14 @@ function ProductFormModal({ mode, categoryLock, types, initial, featuredCount, o
                   </Field>
                   <div className={mode === 'add' ? 'grid grid-cols-2 gap-3' : ''}>
                     <Field label="Price">
-                      <input value={form.price} onChange={set('price')} inputMode="decimal" placeholder="e.g. 1250" className={inputClass} />
+                      <input value={form.price} onChange={set('price')} maxLength={15} inputMode="decimal" placeholder="e.g. 1250" className={inputClass} />
                     </Field>
                     {mode === 'add' && (
                       <Field label="Stock">
                         <input
                           value={form.stock}
                           onChange={(e) => {
-                            setForm((f) => ({ ...f, stock: e.target.value.replace(/\D/g, '').slice(0, 6) }));
+                              setForm((f) => ({ ...f, stock: e.target.value.replace(/\D/g, '').slice(0, 7) }));
                             setError('');
                           }}
                           inputMode="numeric"
@@ -427,16 +422,16 @@ function ProductFormModal({ mode, categoryLock, types, initial, featuredCount, o
               <p className="mt-1 text-xs text-[#2D3831]/60">Include the unit, like cm or in.</p>
               <div className="mt-3 grid gap-4 sm:grid-cols-2">
                 <Field label="Length">
-                  <input value={form.length} onChange={set('length')} placeholder="e.g. 120 cm or 47 in" className={inputClass} />
+                  <input value={form.length} onChange={set('length')} maxLength={120} placeholder="e.g. 120 cm or 47 in" className={inputClass} />
                 </Field>
                 <Field label="Depth">
-                  <input value={form.depth} onChange={set('depth')} placeholder="e.g. 60 cm or 24 in" className={inputClass} />
+                  <input value={form.depth} onChange={set('depth')} maxLength={120} placeholder="e.g. 60 cm or 24 in" className={inputClass} />
                 </Field>
                 <Field label="Width">
-                  <input value={form.width} onChange={set('width')} placeholder="e.g. 80 cm or 31 in" className={inputClass} />
+                  <input value={form.width} onChange={set('width')} maxLength={120} placeholder="e.g. 80 cm or 31 in" className={inputClass} />
                 </Field>
                 <Field label="Height">
-                  <input value={form.height} onChange={set('height')} placeholder="e.g. 75 cm or 30 in" className={inputClass} />
+                  <input value={form.height} onChange={set('height')} maxLength={120} placeholder="e.g. 75 cm or 30 in" className={inputClass} />
                 </Field>
               </div>
             </div>
@@ -446,34 +441,19 @@ function ProductFormModal({ mode, categoryLock, types, initial, featuredCount, o
             <div className="space-y-5">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Material">
-                  <input value={form.material} onChange={set('material')} placeholder="e.g. Solid oak" className={inputClass} />
+                  <input value={form.material} onChange={set('material')} maxLength={120} placeholder="e.g. Solid oak" className={inputClass} />
                 </Field>
                 <Field label="Color">
-                  <input value={form.color} onChange={set('color')} placeholder="e.g. Natural" className={inputClass} />
+                  <input value={form.color} onChange={set('color')} maxLength={120} placeholder="e.g. Natural" className={inputClass} />
                 </Field>
                 <Field label="Finish">
-                  <input value={form.finish} onChange={set('finish')} placeholder="e.g. Matte oil finish" className={inputClass} />
+                  <input value={form.finish} onChange={set('finish')} maxLength={120} placeholder="e.g. Matte oil finish" className={inputClass} />
                 </Field>
-              </div>
-              <div>
-                <h3 className="text-xl text-[#6B4F3A]">Product Materials</h3>
-                <p className="mt-1 text-xs text-[#2D3831]/60">Optional. Separate items with commas.</p>
-                <div className="mt-3 grid gap-4 sm:grid-cols-3">
-                  <Field label="Carpentry">
-                    <input value={form.carpentry} onChange={set('carpentry')} className={inputClass} />
-                  </Field>
-                  <Field label="Upholstery">
-                    <input value={form.upholstery} onChange={set('upholstery')} className={inputClass} />
-                  </Field>
-                  <Field label="Finishing">
-                    <input value={form.finishing} onChange={set('finishing')} className={inputClass} />
-                  </Field>
-                </div>
               </div>
             </div>
           )}
 
-          {step === 3 && <ProductSummary product={preview} />}
+          {step === 3 && <ProductSummary product={preview} showMaterials={false} />}
         </div>
 
         {error && <p role="alert" className="admin-fade mt-5 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}

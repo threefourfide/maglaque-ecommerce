@@ -234,8 +234,8 @@ export default function App() {
     setUser(me);
   };
 
-  const addOrder = async ({ addressId }) => {
-    const { order } = await api.createOrder(addressId);
+  const addOrder = async ({ addressId, discountCode }) => {
+    const { order } = await api.createOrder(addressId, discountCode);
     setOrders((prev) => [order, ...prev]);
   };
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchShippingRates, fetchShippingPromos } from '../api';
+import { fetchShippingRates, fetchShippingPromos, validateDiscountCode } from '../api';
 import { goBack } from '../utils/nav';
 import { onLive } from '../live';
 import { useNavigate, Link } from 'react-router-dom';
@@ -16,6 +16,10 @@ export default function Checkout({ cart, clearCart, addOrder, user, addresses = 
   const [paymentMethod, setPaymentMethod] = useState('cod');
   const [placing, setPlacing] = useState(false);
   const [orderError, setOrderError] = useState('');
+  const [discountCode, setDiscountCode] = useState('');
+  const [appliedDiscount, setAppliedDiscount] = useState(null);
+  const [discountError, setDiscountError] = useState('');
+  const [applyingDiscount, setApplyingDiscount] = useState(false);
 
   const [rates, setRates] = useState([]);
   const [promos, setPromos] = useState([]);
@@ -42,6 +46,7 @@ export default function Checkout({ cart, clearCart, addOrder, user, addresses = 
   const overStock = cart.find((i) => i.stock !== undefined && i.quantity > i.stock);
 
   const subtotal = cart.reduce((total, item) => total + item.price * item.quantity, 0);
+  const discountedSubtotal = appliedDiscount?.subtotal ?? subtotal;
 
   // Chosen address: the one picked, else the default, else the first saved one
   const selected =
@@ -53,13 +58,33 @@ export default function Checkout({ cart, clearCart, addOrder, user, addresses = 
   const rateFor = (a) => (a ? rates.find((r) => (a.regionCode && r.region_code === a.regionCode) || r.region === a.region) : null);
   const baseRate = rateFor(selected)?.rate ?? 0;
   const promo = promos
-    .filter((p) => subtotal >= p.minSpend)
+    .filter((p) => discountedSubtotal >= p.minSpend)
     .sort((a, b) => b.percent - a.percent)[0];
   const shippingFee = promo ? Math.round(baseRate * (100 - promo.percent)) / 100 : baseRate;
   const nextPromo = baseRate > 0
-    ? promos.filter((p) => subtotal < p.minSpend).sort((a, b) => a.minSpend - b.minSpend)[0]
+    ? promos.filter((p) => discountedSubtotal < p.minSpend).sort((a, b) => a.minSpend - b.minSpend)[0]
     : null;
-  const grandTotal = subtotal + shippingFee;
+  const grandTotal = discountedSubtotal + shippingFee;
+
+  const applyDiscount = async () => {
+    const code = discountCode.trim();
+    if (!code || applyingDiscount) {
+      if (!code) setDiscountError('Enter a discount code.');
+      return;
+    }
+    setApplyingDiscount(true);
+    setDiscountError('');
+    try {
+      const result = await validateDiscountCode(code);
+      setAppliedDiscount(result);
+      setDiscountCode(result.code);
+    } catch (err) {
+      setAppliedDiscount(null);
+      setDiscountError(err.message);
+    } finally {
+      setApplyingDiscount(false);
+    }
+  };
 
   // Addresses are managed in the account page
   const goAddAddress = () =>
@@ -71,7 +96,7 @@ export default function Checkout({ cart, clearCart, addOrder, user, addresses = 
     setPlacing(true);
     setOrderError('');
     try {
-      await addOrder({ addressId: selected.id });
+      await addOrder({ addressId: selected.id, discountCode: appliedDiscount?.code || '' });
       setIsSubmitted(true);
       clearCart();
     } catch (err) {
@@ -316,11 +341,68 @@ export default function Checkout({ cart, clearCart, addOrder, user, addresses = 
               ))}
             </div>
 
+            <div className="border-t border-[#2D3831]/10 pt-4">
+              <label htmlFor="discount-code" className="block text-xs uppercase tracking-[0.15em] text-[#2D3831]/70">
+                Discount code
+              </label>
+              <div className="mt-2 flex gap-2">
+                <input
+                  id="discount-code"
+                  value={discountCode}
+                  onChange={(e) => {
+                    setDiscountCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 32));
+                    setAppliedDiscount(null);
+                    setDiscountError('');
+                  }}
+                  disabled={applyingDiscount || placing}
+                  maxLength={32}
+                  autoComplete="off"
+                  placeholder="Enter code"
+                  className="h-11 min-w-0 flex-1 border border-[#8A6A4F]/70 bg-white px-3 text-sm outline-none focus:border-[#2D3A31] disabled:opacity-60"
+                />
+                {appliedDiscount ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAppliedDiscount(null);
+                      setDiscountCode('');
+                      setDiscountError('');
+                    }}
+                    disabled={placing}
+                    className="border border-[#2D3831]/40 px-4 text-xs uppercase tracking-wider hover:bg-[#2D3831]/5 disabled:opacity-50"
+                  >
+                    Remove
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={applyDiscount}
+                    disabled={applyingDiscount || placing}
+                    className="bg-[#2D3831] px-4 text-xs uppercase tracking-wider text-[#F9F6F0] hover:opacity-90 disabled:opacity-50"
+                  >
+                    {applyingDiscount ? 'Applying...' : 'Apply'}
+                  </button>
+                )}
+              </div>
+              {appliedDiscount && (
+                <p className="mt-2 text-xs text-[#2D6A4F]">
+                  Code {appliedDiscount.code} applied. It does not stack with automatic discounts.
+                </p>
+              )}
+              {discountError && <p role="alert" className="mt-2 text-xs text-red-700">{discountError}</p>}
+            </div>
+
             <div className="border-t border-[#2D3831]/10 pt-4 space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-[#2D3831]/70">Subtotal</span>
                 <span>₱{subtotal.toLocaleString()}</span>
               </div>
+              {appliedDiscount && (
+                <div className="flex justify-between text-sm text-[#2D6A4F]">
+                  <span>Code discount ({appliedDiscount.code})</span>
+                  <span>−₱{appliedDiscount.discountAmount.toLocaleString()}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm">
                 <span className="text-[#2D3831]/70">Shipping</span>
                 {!selected ? (

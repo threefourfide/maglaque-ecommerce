@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { goBack } from '../utils/nav';
 import { cleanPhone, validPhone, validName, PHONE_ERROR, NAME_ERROR } from '../utils/validate';
 import PhAddressFields from '../components/Phaddressfields';
+import PasswordVisibilityField from '../components/PasswordVisibilityField';
 import ReviewModal from '../components/ReviewModal';
 import { Clock, Package, Truck, Star, Pencil, Trash2, X, MapPin, Calendar, CreditCard, Check, CheckCircle2, Camera, ArrowLeft, ShoppingBag } from 'lucide-react';
 
@@ -654,8 +655,7 @@ export default function Profile({
       <h2 className="font-serif text-2xl text-[#2D3831]">Change password</h2>
 
       <form onSubmit={handleSubmit} className="mt-6 space-y-4" noValidate>
-        <input
-          type="password"
+        <PasswordVisibilityField
           name="current"
           value={form.current}
           onChange={handleChange}
@@ -663,8 +663,7 @@ export default function Profile({
           autoComplete="current-password"
           className={inputClass}
         />
-        <input
-          type="password"
+        <PasswordVisibilityField
           name="next"
           value={form.next}
           onChange={handleChange}
@@ -695,8 +694,7 @@ export default function Profile({
             ))}
           </ul>
         )}
-        <input
-          type="password"
+        <PasswordVisibilityField
           name="confirm"
           value={form.confirm}
           onChange={handleChange}
@@ -1132,6 +1130,12 @@ export default function Profile({
                   <span className="text-[#2D3831]/70">Subtotal</span>
                   <span>₱{merchandise.toLocaleString()}</span>
                 </div>
+                {order.discountCode && order.discountAmount > 0 && (
+                  <div className="flex justify-between text-[#2D6A4F]">
+                    <span>Code {order.discountCode} savings</span>
+                    <span>₱{order.discountAmount.toLocaleString()}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-[#2D3831]/70">Shipping{order.shippingPromo ? ` (${order.shippingPromo})` : ''}</span>
                   {shippingFee > 0 ? (
