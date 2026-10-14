@@ -80,7 +80,6 @@ function LoginForm({ onFlip, onLogin, admin = false }) {
             <span className="auth-check-box" aria-hidden="true" />
             Remember me
           </label>
-          <a href="#forgot" className="auth-link">Forgot password?</a>
         </div>
 
         {loginError && <p className="auth-error" role="alert">{loginError}</p>}
