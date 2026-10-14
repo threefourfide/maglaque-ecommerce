@@ -91,7 +91,11 @@ function Shell({ user, onLogout, onUserChange }) {
 
   const confirmLogoutRequest = () => {
     setConfirmLogout(false);
-    requestNavigation('logout');
+    if (homepageHasUnsavedChanges) {
+      setPendingNavigation('logout');
+      return;
+    }
+    logout();
   };
 
   return (
